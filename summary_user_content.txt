@@ -1,0 +1,7 @@
+Based on the transcript of the entire conversation, Return a short conversation summary of no more than 100 words.
+Include only the important details.
+The summary should address the customer by name and summarize the course of the conversation for him/her.
+The summary should be in the conversation's language
+
+The customer name (שם לקוח) is:  {customer_name}
+The Agent-Client full converstion: {full_conversation}

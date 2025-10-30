@@ -1,0 +1,37 @@
+{
+  "name": "smartagent",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@types/body-parser": "^1.19.6",
+    "@types/chai": "^5.2.2",
+    "@types/express": "^5.0.3",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^24.3.2",
+    "@types/nodemailer": "^7.0.1",
+    "@types/sinon": "^17.0.4",
+    "chai": "^6.0.1",
+    "mocha": "^11.7.2",
+    "sinon": "^21.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@elastic/elasticsearch": "^9.1.1",
+    "axios": "^1.12.1",
+    "body-parser": "^2.2.0",
+    "express": "^5.1.0",
+    "mongodb": "^6.20.0",
+    "nodemailer": "^7.0.6",
+    "openai": "^4.52.7"
+  }
+}
