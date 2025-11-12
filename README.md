@@ -25,3 +25,5 @@ https://dashboard.ngrok.com/get-started/setup/macos
 
 
 curl -X POST https://1566419e6b92.ngrok-free.app/webhook -H "Content-Type: application/json" -d '{"firstName": "אמיר", "lastName": "קפואנו", "phoneNumber": "972537294438"}'
+
+curl -X POST https://1566419e6b92.ngrok-free.app/schedule-interview-webhook -H "Content-Type: application/json" -d '{"firstName": "אמיר", "lastName": "קפואנו", "phoneNumber": "972537294438"}'

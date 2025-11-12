@@ -8,9 +8,7 @@
 
 export async function summarizeConversation(userContent: string): Promise<string> {
   const response = await openai.chat.completions.create({
-    model: 'gpt-4',
-    temperature: 0.7,
-    max_tokens: 400,
+    model: 'gpt-5',
     messages: [
       { role: 'user', content: userContent }
     ],
@@ -50,9 +48,7 @@ export async function askYesNoQuestion(answer: string): Promise<'yes' | 'no'> {
   const systemPrompt = "I'm going to write few words and sentences in English and in Hebrew. I want you to answer by yes for positive connotation and by no for negative connotation.";
   const userPrompt = "I'm going to write few words and sentences in English and in Hebrew. I want you to answer by yes for positive connotation and by no for negative connotation: '" + answer.toLowerCase() + "'";
   const response = await openai.chat.completions.create({
-    model: 'gpt-4',
-    temperature: 0.2,
-    max_tokens: 400,
+    model: 'gpt-5',
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },

@@ -77,40 +77,54 @@ async function handleEndOfConversation({
   userInfo,
   userState,
   endOfConversation,
-  scheduleLink
+  scheduleLink, conversationText
 }: {
   from: string;
   userInfo: { firstName?: string; lastName?: string };
   userState: { lastMessage: string; lastMessageText: string; conversation: Array<{ from: string; text: string }> };
   endOfConversation: string;
   scheduleLink: string;
+  conversationText: string;
 }) {
     // Summarize the conversation
     const fullConversation = userState.conversation.map((m: {from: string, text: string}) => `${m.from === 'user' ? 'User' : 'Agent'}: ${m.text}`).join('\n');
-    let customSummaryUserContent = summaryUserContent.replace('{full_conversation}', fullConversation).replace('{customer_name}', userInfo.firstName || '');
+    let customSummaryUserContent = summaryUserContent.replace('{job_description}', jobDescription)
+                                            .replace('{interview_questions}', interviewQuestions)
+                                            .replace('{full_conversation}', fullConversation)
+                                            .replace('{candidate_name}', userInfo.firstName || '');
     const conversation_summary = await summarizeConversation(customSummaryUserContent);
-    let customEndOfConversation = endOfConversation.replace('{schedule_link}', scheduleLink).replace('{conversation_summary}', conversation_summary);
-    await sendWhatsAppMessage(from, customEndOfConversation);
+    //let customEndOfConversation = endOfConversation.replace('{schedule_link}', scheduleLink).replace('{conversation_summary}', conversation_summary);
+    
+    conversationText = conversationText.replace(END_OF_CONVERSATION, '')
+    console.log(`[Conversation] User ${from} conversation: ${conversationText}.`);
+    await sendWhatsAppMessage(from, conversationText);
+    
+    //await sendWhatsAppMessage(from, customEndOfConversation);
     userState.lastMessage = END_OF_CONVERSATION_MESSAGE;
-    userState.lastMessageText = customEndOfConversation;
-    userState.conversation.push({ from: 'agent', text: customEndOfConversation });
+    //userState.lastMessageText = customEndOfConversation;
+    userState.lastMessageText = conversationText;
+    userState.conversation.push({ from: 'agent', text: conversationText });
     await saveConversation({
         phoneNumber: from,
         firstName: userInfo.firstName || '',
         lastName: userInfo.lastName || '',
         fullConversation: fullConversation,
         lastMessage: userState.lastMessage,
-        lastReply: customEndOfConversation,
+        lastReply: conversationText,
         timestamp: new Date().toISOString(),
         conversationState: 'Ended',
         conversationEndTimeStamp: new Date().toISOString()
     });
 
     try {
-        let subject = `סיכום שיחה עם ${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim();
-        let conversationText = userState.conversation.map((m: {from: string, text: string}) => `${m.from === 'user' ? 'User' : 'Agent'}: ${m.text}`).join('\n');
-        const emailResult = await sendGmail(subject, conversationText);
-        console.log(`[EMAIL] Sent after END_OF_CONVERSATION_MESSAGE to ${SALES_INBOX_MAIL}:`, { subject, conversationText, success: emailResult });
+        let subject = `סיכום ראיון עם ${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim();
+        let conversationTranscript = userState.conversation.map((m: {from: string, text: string}) => `${m.from === 'user' ? 'User' : 'Agent'}: ${m.text}`).join('\n');
+        
+        // Create email body with both transcript and summary
+        let emailBody = `תמליל הראיון:\n${conversationTranscript}\n\n---\n\nסיכום הראיון:\n${conversation_summary}`;
+        
+        const emailResult = await sendGmail(subject, emailBody);
+        console.log(`[EMAIL] Sent after END_OF_CONVERSATION_MESSAGE to ${SALES_INBOX_MAIL}:`, { subject, emailBody, success: emailResult });
     } catch (err) {
         console.error('[EMAIL] Failed to send after END_OF_CONVERSATION_MESSAGE:', err);
     }
@@ -185,13 +199,8 @@ async function handleCustomConversationState({ from, userInfo, userState, replyT
                                         .replace('{last_question}', userState.lastMessageText)
                                         .replace('{last_answer}', replyText);
     let convinceText = await findAWayToConvice(customSystemContent, customUserContent);
-    if (convinceText.includes(END_OF_CONVERSATION) || convinceText.includes(CONVERSATION_FAILED)) {
-        if (convinceText.includes(CONVERSATION_FAILED)) {
-            await handleConversationFailed({ from, userInfo, userState, conversationFailedResponse });
-        }
-        else if (convinceText.includes(END_OF_CONVERSATION)) {
-            await handleEndOfConversation({ from, userInfo, userState, endOfConversation, scheduleLink });
-        }
+    if (convinceText.includes(END_OF_CONVERSATION)) {
+        await handleEndOfConversation({ from, userInfo, userState, endOfConversation, scheduleLink, conversationText: convinceText });
     } else {
         await handleConversation({ from, userInfo, userState, conversationText: convinceText });
     }
@@ -414,8 +423,8 @@ app.post('/webhook', async (req, res) => {
     }
 
     const candidateName = `${firstName || ''} ${lastName || ''}`.trim();
-    let customintroQuestion = introQuestion;
-    customintroQuestion = introQuestion.replace('{candidate_name}', candidateName)
+    let customIntroQuestion = introQuestion;
+    customIntroQuestion = introQuestion.replace('{candidate_name}', candidateName)
                                             .replace('{interviewer_name}', 'ג׳ובי')
                                             .replace('{company_name}', 'Bancara')
                                             .replace('{job_title}', 'Affiliate Manager');                                 
@@ -425,7 +434,7 @@ app.post('/webhook', async (req, res) => {
       phoneNumber: userKey,
       firstName,
       lastName,
-      fullConversation: `Agent: ${introQuestion}`,
+      fullConversation: `Agent: ${customIntroQuestion}`,
       lastMessage: INTRO_TEMPLATE_MESSAGE,
       lastReply: '',
       timestamp: new Date().toISOString(),
@@ -439,6 +448,25 @@ app.post('/webhook', async (req, res) => {
   } catch (err) {
     console.error('Error sending template:', err);
     res.status(500).json({ error: 'Failed to send template', details: (err instanceof Error ? err.message : String(err)) });
+  }
+});
+
+// Webhook endpoint to trigger the bot from Fireberry
+app.post('/schedule-interview-webhook', async (req, res) => {
+  console.log('Schedule Interview Webhook called with body:', req.body);
+  const { firstName, lastName, phoneNumber } = req.body;
+  if (!firstName || !lastName || !phoneNumber) {
+    console.log('Missing required fields:', { firstName, lastName, phoneNumber });
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+  try {
+    const candidateName = `${firstName || ''} ${lastName || ''}`.trim();
+    let customEndOfConversation = endOfConversation.replace('{schedule_link}', scheduleLink).replace('{candidate_name}', candidateName);
+    await sendWhatsAppMessage(phoneNumber, customEndOfConversation);
+    res.json({ status: 'Schedule interview message sent' });
+  } catch (err) {
+    console.error('Error sending schedule interview message:', err);
+    res.status(500).json({ error: 'Failed to send schedule interview message', details: (err instanceof Error ? err.message : String(err)) });
   }
 });
 
