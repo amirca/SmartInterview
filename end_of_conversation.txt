@@ -1,4 +1,4 @@
-סיכום השיחה:
+סיכום :
 
 {conversation_summary}
 

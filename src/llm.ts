@@ -23,9 +23,7 @@ export async function summarizeConversation(userContent: string): Promise<string
 
 export async function findAWayToConvice(systemContent: string, userContent: string): Promise<string> {
     const response = await openai.chat.completions.create({
-        model: 'gpt-4',
-        temperature: 0.7,
-        max_tokens: 400,
+        model: 'gpt-5',
         messages: [
         { role: 'system', content: systemContent },
         { role: 'user', content: userContent },

@@ -3,8 +3,16 @@ import { askYesNoQuestion } from './llm.js';
 export { askYesNoQuestion };
 import axios from 'axios';
 
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || 'EAAQHV233z9MBPgaGFHooVWZAzZCm7MTMgnMnDSg7ATV8VZBOWSfmNg48c15zA6q62iTlyYDVf3K9XdkrYw8HlEhmXLNveM0foNrn3USviwcz2gCBRn6QWXD6Uq5wz2MM0mxkHVWaWbSnvfS0YggBJuSd88sEi1J9oP8SQ4mJdLFn3WuFbhqbZAW428EJXz2AIwZDZD';
-const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '746160941921930';
+if (!process.env.WHATSAPP_ACCESS_TOKEN) {
+  throw new Error('WHATSAPP_ACCESS_TOKEN environment variable is required');
+}
+
+if (!process.env.WHATSAPP_PHONE_NUMBER_ID) {
+  throw new Error('WHATSAPP_PHONE_NUMBER_ID environment variable is required');
+}
+
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
 
 // Utility to sanitize text for WhatsApp template
@@ -18,9 +26,9 @@ export async function sendTemplateMessage(
   candidate: { firstName?: string, lastName?: string }
 ) {
   const url = `https://graph.facebook.com/v19.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
-  const name = `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim();
+  const candidateName = `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim();
   const formattedPhone = formatPhoneNumber(phoneNumber);
-  const templateName = 'smart_agent_intro'; // Ensure this template is created in your WhatsApp Business Account
+  const templateName = 'smart_interview_template'; // Ensure this template is created in your WhatsApp Business Account
   const payload: any = {
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
@@ -35,8 +43,23 @@ export async function sendTemplateMessage(
           parameters: [
             {
               type: 'text',
-              parameter_name: 'text',
-              text: sanitize(name || ''),
+              parameter_name: 'candidate_name',
+              text: sanitize(candidateName || ''),
+            },
+            {
+              type: 'text',
+              parameter_name: 'interviewer_name',
+              text: sanitize('ג׳ובי'),
+            },
+            {
+              type: 'text',
+              parameter_name: 'company_name',
+              text: sanitize('Bancara'),
+            },
+            {
+              type: 'text',
+              parameter_name: 'job_title',
+              text: sanitize('Affiliate Manager'),
             },
           ],
         },

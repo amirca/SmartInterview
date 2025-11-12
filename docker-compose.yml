@@ -1,14 +1,18 @@
 version: '3.3'
 services:
-  smartagent:
+  smartinterview:
     build: .
-    image: smartagent:latest
-    container_name: smartagent
+    image: smartinterview:latest
+    container_name: smartinterview
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - WHATSAPP_ACCESS_TOKEN=${WHATSAPP_ACCESS_TOKEN}
       - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
-      - MONGODB_URI=mongodb://mongodb:27017/smartagent
+      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
+      - WHATSAPP_BUSINESS_ACCOUNT_ID=${WHATSAPP_BUSINESS_ACCOUNT_ID}
+      - GMAIL_USER=${GMAIL_USER}
+      - GMAIL_PASS=${GMAIL_PASS}
+      - MONGODB_URI=mongodb://mongodb:27017/smartinterview
     ports:
       - "3111:3111"
     restart: unless-stopped

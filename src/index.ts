@@ -35,6 +35,8 @@ function loadTextFile(filePath: string, label: string = ''): string {
 
 const SYSTEM_CONTENT_PATH = path.resolve(process.cwd(), 'system_content.txt');
 const USER_CONTENT_PATH = path.resolve(process.cwd(), 'user_content.txt');
+const JOB_DESCRIPTION_PATH = path.resolve(process.cwd(), 'job_description.txt');
+const INTERVIEW_QUESTIONS_PATH = path.resolve(process.cwd(), 'interview_questions.txt');
 const SEE_VIDEO_QUESTION_PATH = path.resolve(process.cwd(), 'see_video_question.txt');
 const END_OF_CONVERSATION_PATH = path.resolve(process.cwd(), 'end_of_conversation.txt');
 const VIDEO_LINK_PATH = path.resolve(process.cwd(), 'video_link.txt');
@@ -48,6 +50,8 @@ const SUMMARY_USER_CONTENT_PATH = path.resolve(process.cwd(), 'summary_user_cont
 const systemContent = loadTextFile(SYSTEM_CONTENT_PATH, 'system content');
 const userContent = loadTextFile(USER_CONTENT_PATH, 'user content');
 const seeVideoQuestion = loadTextFile(SEE_VIDEO_QUESTION_PATH, 'see video question');
+const interviewQuestions = loadTextFile(INTERVIEW_QUESTIONS_PATH, 'interview questions').trim();
+const jobDescription = loadTextFile(JOB_DESCRIPTION_PATH, 'job description').trim();
 const videoLink = loadTextFile(VIDEO_LINK_PATH, 'video link').trim();
 const endOfConversation = loadTextFile(END_OF_CONVERSATION_PATH, 'end of conversation').trim();
 const scheduleLink = loadTextFile(SCHEDULE_LINK_PATH, 'schedule link').trim();
@@ -59,29 +63,12 @@ const summaryUserContent = loadTextFile(SUMMARY_USER_CONTENT_PATH, 'summary user
 
 const CONVERSATION_FAILED = 'CONVERSATION_FAILED';
 const INTRO_TEMPLATE_MESSAGE = 'intro_template_message';
-const VIDEO_LINK_MESSAGE = 'video_link_message';
-const SEE_VIDEO_QUESTION_MESSAGE = 'see_video_question_message';
 const END_OF_CONVERSATION_MESSAGE = 'end_of_conversation_message';
 const CUSTOM_CONVINCE_QUESTION_MESSAGE = 'custom_convince_question';
 const END_OF_CONVERSATION = 'END_OF_CONVERSATION';
 const SALES_INBOX_MAIL = "capuano@gmail.com";
 let last_message = INTRO_TEMPLATE_MESSAGE;
 
-
-// Track when each user was sent the video link
-const videoLinkSentTimestamps = new Map<string, { sentAt: number, userInfo: { firstName?: string; lastName?: string } }>();
-
-// Global interval to check if 10 seconds have passed since video link was sent
-setInterval(async () => {
-    const now = Date.now();
-    for (const [from, { sentAt, userInfo }] of videoLinkSentTimestamps.entries()) {
-        if (now - sentAt >= 10000) {
-          // 10 seconds passed, do the logic from checkIfWatchedVideo
-          await checkIfWatchedVideo({ from, userInfo });
-          videoLinkSentTimestamps.delete(from);
-        }
-    }
-}, 2000); // Check every 2 seconds
 
 // Set default last_message for new users
 // Helper to handle END_OF_CONVERSATION logic
@@ -100,8 +87,8 @@ async function handleEndOfConversation({
 }) {
     // Summarize the conversation
     const fullConversation = userState.conversation.map((m: {from: string, text: string}) => `${m.from === 'user' ? 'User' : 'Agent'}: ${m.text}`).join('\n');
-    let customUserContent = summaryUserContent.replace('{full_conversation}', fullConversation).replace('{customer_name}', userInfo.firstName || '');
-    const conversation_summary = await summarizeConversation(customUserContent);
+    let customSummaryUserContent = summaryUserContent.replace('{full_conversation}', fullConversation).replace('{customer_name}', userInfo.firstName || '');
+    const conversation_summary = await summarizeConversation(customSummaryUserContent);
     let customEndOfConversation = endOfConversation.replace('{schedule_link}', scheduleLink).replace('{conversation_summary}', conversation_summary);
     await sendWhatsAppMessage(from, customEndOfConversation);
     userState.lastMessage = END_OF_CONVERSATION_MESSAGE;
@@ -179,70 +166,6 @@ async function handleConversation({ from, userInfo, userState, conversationText 
     });
 }
 
-async function sendVideoLink({ from, userState, userInfo }: {
-  from: string;
-  userState: { lastMessage: string; lastMessageText: string; conversation: Array<{ from: string; text: string }> };
-  userInfo: { firstName?: string; lastName?: string };
-}) {
-    console.log(`[Conversation] User ${from} sending video: ${videoLink}.`);
-    await sendWhatsAppMessage(from, videoLink);
-    // Record the time video link was sent for stateless timer
-    videoLinkSentTimestamps.set(from, { sentAt: Date.now(), userInfo });
-    userState.lastMessage = VIDEO_LINK_MESSAGE;
-    userState.lastMessageText = videoLink;
-    userState.conversation.push({ from: 'agent', text: videoLink });
-    // Save updated state to DB
-    await saveConversation({
-        phoneNumber: from,
-        firstName: userInfo.firstName || '',
-        lastName: userInfo.lastName || '',
-        fullConversation: userState.conversation.map((m: { from: string; text: string }) => `${m.from === 'user' ? 'User' : 'Agent'}: ${m.text}`).join('\n'),
-        lastMessage: userState.lastMessage,
-        lastReply: userState.lastMessageText,
-        timestamp: new Date().toISOString(),
-        conversationState: 'Started',
-    });
-}
-
-async function checkIfWatchedVideo({ from, userInfo }: {
-  from: string;
-  userInfo: { firstName?: string; lastName?: string };
-}) {
-    console.log(`[Conversation] User ${from} waiting user to watch video: ${videoLink}.`);
-    // Fetch latest user state from DB before sending question
-    let latestRecord = await getConversationByState(from, 'Started');
-    let state;
-    if (latestRecord) {
-      state = {
-        lastMessage: latestRecord.lastMessage,
-        lastMessageText: latestRecord.lastReply,
-        conversation: latestRecord.fullConversation
-          ? latestRecord.fullConversation.split('\n').map((line: string) => {
-            const match = line.match(/^(User|Agent): (.*)$/);
-            return match ? { from: (match[1]?.toLowerCase() ?? 'agent'), text: (match[2] ?? line) } : { from: 'agent', text: line };
-          })
-          : []
-      };
-    }
-
-    if (state && (state.lastMessage === VIDEO_LINK_MESSAGE)) {
-        await sendWhatsAppMessage(from, seeVideoQuestion);
-        state.lastMessage = SEE_VIDEO_QUESTION_MESSAGE;
-        state.lastMessageText = seeVideoQuestion;
-        state.conversation.push({ from: 'agent', text: seeVideoQuestion });
-        await saveConversation({
-            phoneNumber: from,
-            firstName: userInfo.firstName || '',
-            lastName: userInfo.lastName || '',
-            fullConversation: state.conversation.map((m: { from: string; text: string }) => `${m.from === 'user' ? 'User' : 'Agent'}: ${m.text}`).join('\n'),
-            lastMessage: state.lastMessage,
-            lastReply: seeVideoQuestion,
-            timestamp: new Date().toISOString(),
-            conversationState: 'Started',
-        });
-    }
-}
-
 async function handleCustomConversationState({ from, userInfo, userState, replyText }: {
     from: string;
     userInfo: { firstName?: string; lastName?: string };
@@ -253,8 +176,14 @@ async function handleCustomConversationState({ from, userInfo, userState, replyT
     let customSystemContent = systemContent;
     let customUserContent = userContent;
     const fullConversation = userState.conversation.map((m: {from: string, text: string}) => `${m.from === 'user' ? 'User' : 'Agent'}: ${m.text}`).join('\n'); 
-    customSystemContent = customSystemContent.replace('{full_conversation}', fullConversation).replace('{last_question}', userState.lastMessageText).replace('{customer_name}', userInfo.firstName || '')
-    customUserContent = customUserContent.replace('{customer_name}', userInfo.firstName || '').replace('{last_question}', userState.lastMessageText).replace('{last_answer}', replyText);
+    customSystemContent = customSystemContent.replace('{job_description}', jobDescription)
+                                            .replace('{interview_questions}', interviewQuestions)
+                                            .replace('{full_conversation}', fullConversation)
+                                            .replace('{last_question}', userState.lastMessageText)
+                                            .replace('{candidate_name}', userInfo.firstName || '')
+    customUserContent = customUserContent.replace('{candidate_name}', userInfo.firstName || '')
+                                        .replace('{last_question}', userState.lastMessageText)
+                                        .replace('{last_answer}', replyText);
     let convinceText = await findAWayToConvice(customSystemContent, customUserContent);
     if (convinceText.includes(END_OF_CONVERSATION) || convinceText.includes(CONVERSATION_FAILED)) {
         if (convinceText.includes(CONVERSATION_FAILED)) {
@@ -268,43 +197,6 @@ async function handleCustomConversationState({ from, userInfo, userState, replyT
     }
 }
 
-async function handleSeeVideoQuestionState({ from, userInfo, userState, replyText, yesNoResult }: {
-    from: string;
-    userInfo: { firstName?: string; lastName?: string };
-    userState: { lastMessage: string; lastMessageText: string; conversation: Array<{ from: string; text: string }> };
-    replyText: string;
-    yesNoResult: string;
-}) {
-    console.log(`[Conversation] Handle see video question user ${from} Yes/No result: ${yesNoResult}, replyText: ${replyText}.`);
-    if (yesNoResult === 'yes') {
-        // Start custom convince conversation loop (first question)
-        let customSystemContent = systemContent;
-        let customUserContent = userContent;
-        const fullConversation = userState.conversation.map((m: {from: string, text: string}) => `${m.from === 'user' ? 'User' : 'Agent'}: ${m.text}`).join('\n');
-        customSystemContent = customSystemContent.replace('{full_conversation}', fullConversation).replace('{last_question}', userState.lastMessageText).replace('{customer_name}', userInfo.firstName || '')
-        customUserContent = customUserContent.replace('{customer_name}', userInfo.firstName || '').replace('{last_question}', userState.lastMessageText).replace('{last_answer}', replyText);
-        let convinceText = await findAWayToConvice(customSystemContent, customUserContent);
-        if (convinceText.includes(END_OF_CONVERSATION) || convinceText.includes(CONVERSATION_FAILED)) {
-        if (convinceText.includes(CONVERSATION_FAILED)) {
-            await handleConversationFailed({ from, userInfo, userState, conversationFailedResponse });
-        }
-        else if (convinceText.includes(END_OF_CONVERSATION)) {
-            await handleEndOfConversation({ from, userInfo, userState, endOfConversation, scheduleLink });
-        }
-        } else {
-            await handleConversation({ from, userInfo, userState, conversationText: convinceText });
-        }
-    } else {
-        let customSystemContent = systemContent;
-        let customUserContent = userContent;
-        const fullConversation = userState.conversation.map((m: {from: string, text: string}) => `${m.from === 'user' ? 'User' : 'Agent'}: ${m.text}`).join('\n');
-        customSystemContent = customSystemContent.replace('{full_conversation}', fullConversation).replace('{last_question}', userState.lastMessageText).replace('{customer_name}', userInfo.firstName || '')
-        customUserContent = customUserContent.replace('{customer_name}', userInfo.firstName || '').replace('{last_question}', userState.lastMessageText).replace('{last_answer}', replyText);
-        let convinceText = await findAWayToConvice(customSystemContent, customUserContent);
-        await handleConversation({ from, userInfo, userState, conversationText: convinceText });
-    }
-}
-
 async function handleIntroMessageState({ from, userInfo, userState, replyText, yesNoResult }: {
     from: string;
     userInfo: { firstName?: string; lastName?: string };
@@ -314,33 +206,37 @@ async function handleIntroMessageState({ from, userInfo, userState, replyText, y
 }) {
     console.log(`[Conversation] Handle intro message user ${from} Yes/No result: ${yesNoResult}, replyText: ${replyText}.`);
     if (yesNoResult === 'yes') {
-        await sendVideoLink({ from, userState, userInfo });
-    } else {
         let customSystemContent = systemContent;
         let customUserContent = userContent;
         const fullConversation = userState.conversation.map((m: {from: string, text: string}) => `${m.from === 'user' ? 'User' : 'Agent'}: ${m.text}`).join('\n');   
-        customSystemContent = customSystemContent.replace('{full_conversation}', fullConversation).replace('{last_question}', userState.lastMessageText).replace('{customer_name}', userInfo.firstName || '')
-        customUserContent = customUserContent.replace('{customer_name}', userInfo.firstName || '').replace('{last_question}', userState.lastMessageText).replace('{last_answer}', replyText);
+        customSystemContent = customSystemContent.replace('{job_description}', jobDescription)
+                                            .replace('{interview_questions}', interviewQuestions)
+                                            .replace('{full_conversation}', fullConversation)
+                                            .replace('{last_question}', userState.lastMessageText)
+                                            .replace('{candidate_name}', userInfo.firstName || '')
+        customUserContent = customUserContent.replace('{candidate_name}', userInfo.firstName || '')
+                                            .replace('{last_question}', userState.lastMessageText)
+                                            .replace('{last_answer}', replyText);
         let convinceText = await findAWayToConvice(customSystemContent, customUserContent);
         if (convinceText.includes(CONVERSATION_FAILED)) {
             await handleConversationFailed({ from, userInfo, userState, conversationFailedResponse });
         } else {
             await handleConversation({ from, userInfo, userState, conversationText: convinceText });
-            await sendVideoLink({ from, userState, userInfo });
         }
     }
 }
 
 async function sendGmail(subject: string, text: string): Promise<boolean> {
-  // Prompt user for Gmail credentials if not set
-  const user = process.env.GMAIL_USER || 'smart.agent2310@gmail.com';
-  const pass = process.env.GMAIL_PASS || 'fbnc yfrk hqta fhpa';
-  console.log(`user: ${user}, pass: ${pass}`);
-  if (!user || !pass) {
+  // Check for required Gmail credentials
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
     console.error('Gmail credentials not set. Please provide GMAIL_USER and GMAIL_PASS in environment.');
-    // You can prompt the user here for credentials if needed
     return false;
   }
+  
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_PASS;
+  console.log(`Sending email with user: ${user}`);
+  
   try {
     const transporter = nodemailer.createTransport({
       service: 'gmail',
@@ -466,10 +362,6 @@ app.post('/whatsapp-webhook', async (req, res) => {
                         await handleIntroMessageState({ from, userInfo, userState, replyText, yesNoResult });
                     }
 
-                    else if (userLastMessage === SEE_VIDEO_QUESTION_MESSAGE) {
-                        await handleSeeVideoQuestionState({ from, userInfo, userState, replyText, yesNoResult });
-                    }
-
                     // Continue convince loop after each user reply to CUSTOM_CONVINCE_QUESTION_MESSAGE
                     else if (userLastMessage === CUSTOM_CONVINCE_QUESTION_MESSAGE) {
                         await handleCustomConversationState({ from, userInfo, userState, replyText });
@@ -485,7 +377,12 @@ app.post('/whatsapp-webhook', async (req, res) => {
 
 // WhatsApp webhook verification (GET)
 app.get('/whatsapp-webhook', (req, res) => {
-  const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'X9x!a7Z@2qL%t4B^mR6p#V8d';
+  if (!process.env.WHATSAPP_VERIFY_TOKEN) {
+    console.error('WHATSAPP_VERIFY_TOKEN environment variable is required');
+    return res.status(500).send('Server configuration error');
+  }
+  
+  const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
@@ -515,6 +412,14 @@ app.post('/webhook', async (req, res) => {
       console.log(`[Webhook] Existing Started conversation for ${userKey}, not opening new.`);
       return res.json({ status: 'Existing conversation already started' });
     }
+
+    const candidateName = `${firstName || ''} ${lastName || ''}`.trim();
+    let customintroQuestion = introQuestion;
+    customintroQuestion = introQuestion.replace('{candidate_name}', candidateName)
+                                            .replace('{interviewer_name}', 'ג׳ובי')
+                                            .replace('{company_name}', 'Bancara')
+                                            .replace('{job_title}', 'Affiliate Manager');                                 
+
     // Create new record with Started state
     await saveConversation({
       phoneNumber: userKey,
