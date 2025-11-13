@@ -1,7 +1,7 @@
 #!/bin/bash
 # restart-smartagent.sh
 
-docker-compose down
+docker compose down
 sudo killall Docker
 open /Applications/Docker.app
 
@@ -13,4 +13,4 @@ echo "Docker is up!"
 
 npm run build
 docker build -t smartagent .
-docker-compose up --build
+docker compose up --build

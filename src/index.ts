@@ -76,16 +76,17 @@ async function handleEndOfConversation({
   from,
   userInfo,
   userState,
-  endOfConversation,
-  scheduleLink, conversationText
+  conversationText
 }: {
   from: string;
   userInfo: { firstName?: string; lastName?: string };
   userState: { lastMessage: string; lastMessageText: string; conversation: Array<{ from: string; text: string }> };
-  endOfConversation: string;
-  scheduleLink: string;
   conversationText: string;
 }) {
+    conversationText = conversationText.replace(END_OF_CONVERSATION, '')
+    console.log(`[Conversation] User ${from} conversation: ${conversationText}.`);
+    await sendWhatsAppMessage(from, conversationText);
+
     // Summarize the conversation
     const fullConversation = userState.conversation.map((m: {from: string, text: string}) => `${m.from === 'user' ? 'User' : 'Agent'}: ${m.text}`).join('\n');
     let customSummaryUserContent = summaryUserContent.replace('{job_description}', jobDescription)
@@ -93,15 +94,7 @@ async function handleEndOfConversation({
                                             .replace('{full_conversation}', fullConversation)
                                             .replace('{candidate_name}', userInfo.firstName || '');
     const conversation_summary = await summarizeConversation(customSummaryUserContent);
-    //let customEndOfConversation = endOfConversation.replace('{schedule_link}', scheduleLink).replace('{conversation_summary}', conversation_summary);
-    
-    conversationText = conversationText.replace(END_OF_CONVERSATION, '')
-    console.log(`[Conversation] User ${from} conversation: ${conversationText}.`);
-    await sendWhatsAppMessage(from, conversationText);
-    
-    //await sendWhatsAppMessage(from, customEndOfConversation);
     userState.lastMessage = END_OF_CONVERSATION_MESSAGE;
-    //userState.lastMessageText = customEndOfConversation;
     userState.lastMessageText = conversationText;
     userState.conversation.push({ from: 'agent', text: conversationText });
     await saveConversation({
@@ -119,10 +112,10 @@ async function handleEndOfConversation({
     try {
         let subject = `סיכום ראיון עם ${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim();
         let conversationTranscript = userState.conversation.map((m: {from: string, text: string}) => `${m.from === 'user' ? 'User' : 'Agent'}: ${m.text}`).join('\n');
-        
+
         // Create email body with both transcript and summary
         let emailBody = `תמליל הראיון:\n${conversationTranscript}\n\n---\n\nסיכום הראיון:\n${conversation_summary}`;
-        
+
         const emailResult = await sendGmail(subject, emailBody);
         console.log(`[EMAIL] Sent after END_OF_CONVERSATION_MESSAGE to ${SALES_INBOX_MAIL}:`, { subject, emailBody, success: emailResult });
     } catch (err) {
@@ -200,7 +193,7 @@ async function handleCustomConversationState({ from, userInfo, userState, replyT
                                         .replace('{last_answer}', replyText);
     let convinceText = await findAWayToConvice(customSystemContent, customUserContent);
     if (convinceText.includes(END_OF_CONVERSATION)) {
-        await handleEndOfConversation({ from, userInfo, userState, endOfConversation, scheduleLink, conversationText: convinceText });
+        await handleEndOfConversation({ from, userInfo, userState, conversationText: convinceText });
     } else {
         await handleConversation({ from, userInfo, userState, conversationText: convinceText });
     }
@@ -359,15 +352,14 @@ app.post('/whatsapp-webhook', async (req, res) => {
                         // conversationEndTimeStamp omitted for Started
                     });
 
-                    let yesNoResult: string = '';
-                    try {
-                        yesNoResult = await askYesNoQuestion(replyText);
-                    } catch (err) {
-                        console.error('AI agent sentiment check failed:', err);
-                    }
-
                     // State machine logic
                     if (userLastMessage === INTRO_TEMPLATE_MESSAGE) {
+                        let yesNoResult: string = '';
+                        try {
+                            yesNoResult = await askYesNoQuestion(replyText);
+                        } catch (err) {
+                            console.error('AI agent sentiment check failed:', err);
+                        }
                         await handleIntroMessageState({ from, userInfo, userState, replyText, yesNoResult });
                     }
 
